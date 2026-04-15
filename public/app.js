@@ -9,6 +9,17 @@
   const SETTINGS_KEY          = "en-training-settings-v1";
   const EXAMPLE_CACHE_KEY     = "en-training-examples-v1";
   const DEFAULT_INTEREST_TAGS = ["美剧", "科技", "游戏", "职场", "商业"];
+  const IS_GITHUB_PAGES       = window.location.hostname.endsWith("github.io");
+  const USE_SERVER_API        = !IS_GITHUB_PAGES;
+  const APP_ROOT              = (() => {
+    if (!IS_GITHUB_PAGES) return "/";
+    const seg = window.location.pathname.split("/").filter(Boolean);
+    return seg.length > 0 ? `/${seg[0]}/` : "/";
+  })();
+
+  function withRoot(path) {
+    return `${APP_ROOT}${String(path || "").replace(/^\/+/, "")}`;
+  }
 
   /* ─── DOM refs ─── */
   const $  = (id) => document.getElementById(id);
@@ -100,6 +111,7 @@
     voiceRec:            null,
     voiceActive:         false,
     quizBg:              '#3DDE6C',
+    meaningsDb:          {},
   };
 
   /* ════════════════════════════════
@@ -176,6 +188,12 @@
   function setCachedExample(word, tag, data) {
     rt.exampleCache[`${word.toLowerCase()}:${tag}`] = data;
     saveExampleCache();
+  }
+
+  function localMeaningsFor(word) {
+    const key = String(word || "").toLowerCase();
+    const list = rt.meaningsDb[key];
+    return Array.isArray(list) ? list : [];
   }
 
   /** Returns fetch headers that include user BYOK if configured. */
@@ -472,14 +490,26 @@
     const needMeaning  = !meta.meaning;
     const needPhonetic = !meta.phonetic;
 
+    if (needMeaning) {
+      const localMeanings = localMeaningsFor(word);
+      if (localMeanings.length > 0) {
+        meta.meaning = localMeanings.join(" / ");
+      }
+    }
+
     if (!needMeaning && !needPhonetic) return meta;
+
+    if (!USE_SERVER_API) {
+      saveState();
+      return meta;
+    }
 
     // Fire both requests in parallel
     const tasks = [];
 
     if (needMeaning) {
       tasks.push(
-        fetch(`/api/meaning?word=${encodeURIComponent(word)}`)
+        fetch(withRoot(`api/meaning?word=${encodeURIComponent(word)}`))
           .then((r) => r.ok ? r.json() : null)
           .then((d) => {
             if (d && d.meanings && d.meanings.length > 0) {
@@ -492,7 +522,7 @@
 
     if (needPhonetic) {
       tasks.push(
-        fetch(`/api/wordinfo?word=${encodeURIComponent(word)}`, { headers: apiHeaders() })
+        fetch(withRoot(`api/wordinfo?word=${encodeURIComponent(word)}`), { headers: apiHeaders() })
           .then((r) => r.ok ? r.json() : null)
           .then((d) => {
             if (d) {
@@ -565,6 +595,11 @@
    * renderAnswer will skip the reset if word matches preloadedExampleWord.
    */
   async function preloadExampleForWord(word, meaning) {
+    if (!USE_SERVER_API) {
+      dom.exampleCard.classList.add("hidden");
+      dom.exampleCard.innerHTML = "";
+      return;
+    }
     rt.preloadedExampleWord = word;
     // (re)set card to loading state so it's ready when answer view shows)
     dom.exampleCard.classList.add("hidden");
@@ -591,7 +626,7 @@
 
     try {
       const r = await fetch(
-        `/api/example?word=${encodeURIComponent(word)}&meaning=${encodeURIComponent(meaning)}&tag=${encodeURIComponent(chosenTag)}`,
+        withRoot(`api/example?word=${encodeURIComponent(word)}&meaning=${encodeURIComponent(meaning)}&tag=${encodeURIComponent(chosenTag)}`),
         { headers: apiHeaders() }
       );
       if (!r.ok) throw new Error();
@@ -612,6 +647,7 @@
 
   // Legacy alias kept for any direct call sites; now just calls preload
   async function fetchExampleAsync(word, meaning) {
+    if (!USE_SERVER_API) return;
     // Reset example card
     dom.exampleCard.classList.add("hidden");
     dom.exampleCard.innerHTML = "";
@@ -640,7 +676,7 @@
 
     try {
       const r = await fetch(
-        `/api/example?word=${encodeURIComponent(word)}&meaning=${encodeURIComponent(meaning)}&tag=${encodeURIComponent(chosenTag)}`,
+        withRoot(`api/example?word=${encodeURIComponent(word)}&meaning=${encodeURIComponent(meaning)}&tag=${encodeURIComponent(chosenTag)}`),
         { headers: apiHeaders() }
       );
       if (!r.ok) throw new Error();
@@ -738,14 +774,16 @@
     };
 
     // Async enrichment: better AI question text + upsert new words (fire-and-forget)
-    _enrichChainAsync(baseWord, candidate).catch(() => {});
+    if (USE_SERVER_API) {
+      _enrichChainAsync(baseWord, candidate).catch(() => {});
+    }
   }
 
   async function _enrichChainAsync(baseWord, candidate) {
     // Upsert word into bottom lexicon if not in wordbank
     if (!candidate.inWordbank) {
       try {
-        const r = await fetch("/api/lexicon/upsert", {
+        const r = await fetch(withRoot("api/lexicon/upsert"), {
           method:  "POST",
           headers: apiHeaders(),
           body:    JSON.stringify({ word: candidate.word }),
@@ -767,7 +805,7 @@
 
     // Try AI for a richer question prompt (update pending item if user hasn't moved on)
     try {
-      const r = await fetch("/api/derived-question", {
+      const r = await fetch(withRoot("api/derived-question"), {
         method:  "POST",
         headers: apiHeaders(),
         body:    JSON.stringify({
@@ -937,19 +975,44 @@
     showView("feedback");
 
     let result = null;
-    try {
-      const resp = await fetch("/api/judge", {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify({
-          targetWord:      item.word,
+    if (USE_SERVER_API) {
+      try {
+        const resp = await fetch(withRoot("api/judge"), {
+          method: "POST",
+          headers: apiHeaders(),
+          body: JSON.stringify({
+            targetWord:      item.word,
+            standardMeaning: meta.meaning || "",
+            userInput,
+            mode:            item.mode || "en-cn",
+          }),
+        });
+        if (resp.ok) result = await resp.json();
+      } catch (_) { /* network error below */ }
+    }
+
+    if (!result && !USE_SERVER_API) {
+      const mode = item.mode || "en-cn";
+      const normalize = (s) => String(s || "").toLowerCase().replace(/[\s，,。.！!？?；;：:]/g, "");
+      if (mode === "cn-en") {
+        const expected = normalize(item.word);
+        const got = normalize(userInput);
+        result = {
+          status: expected === got ? "correct" : "wrong",
+          msg: expected === got ? "拼写正确" : `标准拼写是 ${item.word}`,
           standardMeaning: meta.meaning || "",
-          userInput,
-          mode:            item.mode || "en-cn",
-        }),
-      });
-      if (resp.ok) result = await resp.json();
-    } catch (_) { /* network error below */ }
+        };
+      } else {
+        const standards = String(meta.meaning || "").split("/").map((x) => normalize(x)).filter(Boolean);
+        const got = normalize(userInput);
+        const hit = standards.some((s) => s && (s.includes(got) || got.includes(s)));
+        result = {
+          status: hit ? "correct" : "wrong",
+          msg: hit ? "释义匹配" : "静态模式下无法使用 AI 精细判题，已按本地词库判断",
+          standardMeaning: meta.meaning || "",
+        };
+      }
+    }
 
     if (!result) {
       result = { status: "wrong", msg: "网络异常，暂按错误处理", standardMeaning: meta.meaning || "" };
@@ -1393,13 +1456,23 @@
     rt.exampleCache = loadExampleCache();
     bindSettings();
 
-    const resp = await fetch("./wordbank.json");
+    const resp = await fetch(withRoot("wordbank.json"));
     const data = await resp.json();
     rt.words = Array.isArray(data.words) ? data.words : [];
 
+    try {
+      const mr = await fetch(withRoot("meanings.json"));
+      if (mr.ok) {
+        const md = await mr.json();
+        rt.meaningsDb = md && typeof md === "object" ? md : {};
+      }
+    } catch (_) {
+      rt.meaningsDb = {};
+    }
+
     // Merge extra words (from chain upserts) without re-shuffling the main order
     try {
-      const er = await fetch("./wordbank-extra.json");
+      const er = await fetch(withRoot("wordbank-extra.json"));
       if (er.ok) {
         const ed = await er.json();
         const extra = Array.isArray(ed.words) ? ed.words : [];
