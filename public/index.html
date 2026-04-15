@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Vocabulary · 背单词</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+
+      <!-- ── 首页 ── -->
+      <section id="homeView" class="view active">
+        <header class="home-header">
+          <div>
+            <h1>Vocabulary</h1>
+            <p class="home-sub">艾宾浩斯复习 · AI 判题 · 词根记忆</p>
+          </div>
+          <button id="settingsToggle" class="icon-btn" type="button" aria-label="设置"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="13" x2="20" y2="13"/><line x1="4" y1="20" x2="20" y2="20"/><circle cx="9" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="2.2" fill="currentColor" stroke="none"/><circle cx="9" cy="20" r="2.2" fill="currentColor" stroke="none"/></svg></button>
+        </header>
+
+        <!-- 设置面板 -->
+        <div id="settingsPanel" class="settings-panel hidden">
+          <h3 class="settings-title">AI 接口设置</h3>
+          <p class="settings-desc">填入你自己的 OpenAI 兼容 API，留空则使用系统默认。</p>
+          <label class="settings-label" for="cfgBaseUrl">Base URL</label>
+          <input id="cfgBaseUrl" class="settings-input" type="url"
+                 placeholder="https://api.openai.com/v1/chat/completions" />
+          <label class="settings-label" for="cfgApiKey">API Key</label>
+          <input id="cfgApiKey" class="settings-input" type="password"
+                 placeholder="sk-..." autocomplete="off" />
+          <label class="settings-label" for="cfgModel">Model（选填）</label>
+          <input id="cfgModel" class="settings-input" type="text"
+                 placeholder="gpt-4o / deepseek-chat / …" />
+          <div class="settings-row">
+            <button id="settingsSave"  class="primary-btn" type="button">保存</button>
+            <button id="settingsClear" class="ghost-btn"   type="button">清除（用默认）</button>
+          </div>
+          <p id="settingsStatus" class="settings-status"></p>
+        </div>
+
+        <!-- 三类词汇统计 -->
+        <div class="stats-row">
+          <div class="stat-card stat-new">
+            <span id="statNew" class="stat-num">—</span>
+            <label>全新</label>
+          </div>
+          <div class="stat-card stat-progress">
+            <span id="statInProgress" class="stat-num">—</span>
+            <label>进度中</label>
+          </div>
+          <div class="stat-card stat-mastered">
+            <span id="statMastered" class="stat-num">—</span>
+            <label>已背熟</label>
+          </div>
+        </div>
+
+        <!-- AI 例句场景 -->
+        <div class="interest-section">
+          <h2 class="section-title">AI 例句场景</h2>
+          <div id="interestTagList" class="interest-tag-list"></div>
+          <div class="interest-input-row">
+            <input id="interestTagInput" class="interest-input" type="text"
+                   placeholder="输入场景，如：美剧" maxlength="12" />
+            <button id="interestTagAdd" class="ghost-btn" type="button">＋ 添加</button>
+          </div>
+        </div>
+
+        <!-- 今日计划 -->
+        <div class="home-plan-card">
+          <h2 class="section-title">今日计划</h2>
+
+          <div class="count-picker">
+            <label class="count-label" for="countInput">每日词量</label>
+            <div class="count-input-row">
+              <button class="count-step" id="countMinus" type="button" aria-label="减少">−</button>
+              <input id="countInput" class="count-input" type="number"
+                     min="1" max="200" step="1" value="20" />
+              <button class="count-step" id="countPlus"  type="button" aria-label="增加">+</button>
+            </div>
+            <p class="count-hint">可输入 1–200 任意数量</p>
+          </div>
+
+          <p id="todayBoard" class="today-board">新词 0 · 复习 0</p>
+          <p id="overflowHint" class="overflow-hint hidden"></p>
+
+          <div class="progress-wrap">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+          <p id="progressText" class="progress-text">0 / 0</p>
+
+          <button id="startBtn" class="primary-btn full-btn" type="button">开始背词</button>
+        </div>
+      </section>
+
+      <!-- ── 背词视图 ── -->
+      <section id="quizView" class="view">
+
+        <!-- 进度条在最顶部 -->
+        <div class="dual-progress">
+          <div class="dp-track dp-new">
+            <div id="dpNewBar" class="dp-bar"></div>
+          </div>
+          <div class="dp-track dp-review">
+            <div id="dpReviewBar" class="dp-bar"></div>
+          </div>
+        </div>
+
+        <!-- 顶栏 -->
+        <div class="quiz-topbar">
+          <button id="quizBackBtn" class="icon-btn" type="button" aria-label="返回首页"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
+          <div class="quiz-progress-text" id="quizProgressText">新词 0/0 · 复习 0/0</div>
+          <button id="speakBtn" class="icon-btn" type="button" aria-label="朗读单词"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+        </div>
+
+        <!-- 题目区：占满剩余空间，文字底部对齐 -->
+        <div class="quiz-content">
+          <p id="modeTag" class="mode-tag">英译中</p>
+          <div id="chainPrompt" class="chain-prompt hidden"></div>
+          <h2 id="questionText" class="question"></h2>
+          <p id="questionHint" class="hint"></p>
+        </div>
+
+        <!-- 输入与操作区 -->
+        <form id="answerForm" class="input-area">
+          <input id="answerInput" type="text" placeholder="请输入答案"
+                 autocomplete="off" spellcheck="false" />
+          <div class="btn-row">
+            <button id="submitBtn" class="circle-btn" type="submit" aria-label="提交答案"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+            <button id="micBtn"   class="circle-btn" type="button" aria-label="语音输入"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg></button>
+            <button id="skipBtn"  class="circle-btn" type="button" aria-label="直接看答案"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+        </form>
+
+      </section>
+
+      <!-- ── 反馈视图（判题中） ── -->
+      <section id="feedbackView" class="view">
+        <div class="quiz-topbar">
+          <div></div>
+          <div class="quiz-progress-text" id="feedbackProgressText"></div>
+          <div></div>
+        </div>
+        <div id="feedbackCard" class="feedback-card">
+          <div class="feedback-spinner"></div>
+          <h2 id="feedbackStatus">判题中...</h2>
+          <p id="feedbackMsg" class="feedback-msg">AI 正在分析</p>
+          <p id="feedbackCompare" class="feedback-compare hidden"></p>
+        </div>
+      </section>
+
+      <!-- ── 答案视图 ── -->
+      <section id="answerView" class="view">
+
+        <!-- 顶栏（白色图标在深色背景上） -->
+        <div class="quiz-topbar">
+          <button id="answerBackBtn" class="icon-btn" type="button" aria-label="返回首页"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
+          <div class="quiz-progress-text" id="answerProgressText"></div>
+          <button id="answerSpeakBtn" class="icon-btn" type="button" aria-label="朗读单词"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+        </div>
+
+        <!-- 可滚动内容区 -->
+        <div class="answer-body">
+          <div class="answer-word-row">
+            <h2 id="answerWord">word</h2>
+            <button id="answerSpeakBtnCard" class="icon-btn" type="button" aria-label="朗读"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+          </div>
+          <p id="answerPhonetic" class="answer-phonetic"></p>
+
+          <!-- 判题状态：内联 pill，紧接音标 -->
+          <div id="judgeBanner" class="judge-banner">
+            <span class="judge-dot"></span>
+            <span id="judgeStatusText"></span>
+            <p id="judgeMsgText" class="judge-msg"></p>
+            <p id="judgeCompareText" class="judge-compare hidden"></p>
+          </div>
+
+          <p id="answerMeaning" class="answer-meaning">释义</p>
+          <div id="rootCard"    class="root-card    hidden"></div>
+          <div id="exampleCard" class="example-card hidden"></div>
+        </div>
+
+        <!-- 底部下一个按钮 -->
+        <div class="answer-footer">
+          <button id="nextBtn" class="capsule-btn full-btn" type="button">下一个<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:8px;vertical-align:-2px"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button>
+        </div>
+
+      </section>
+
+      <!-- ── 完成视图 ── -->
+      <section id="doneView" class="view">
+        <div class="done-card">
+          <h2>今日完成</h2>
+          <p id="doneStats" class="done-stats">完成 0 词，正确率 0%</p>
+          <button id="restartBtn" class="capsule-btn full-btn" type="button">返回首页</button>
+        </div>
+      </section>
+
+    </main>
+
+    <script src="/wordData.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
