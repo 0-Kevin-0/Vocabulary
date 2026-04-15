@@ -1393,13 +1393,13 @@
     rt.exampleCache = loadExampleCache();
     bindSettings();
 
-    const resp = await fetch("/wordbank.json");
+    const resp = await fetch("./wordbank.json");
     const data = await resp.json();
     rt.words = Array.isArray(data.words) ? data.words : [];
 
     // Merge extra words (from chain upserts) without re-shuffling the main order
     try {
-      const er = await fetch("/wordbank-extra.json");
+      const er = await fetch("./wordbank-extra.json");
       if (er.ok) {
         const ed = await er.json();
         const extra = Array.isArray(ed.words) ? ed.words : [];
