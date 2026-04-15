@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const path = require("path");
 const fs   = require("fs");
 const express = require("express");
@@ -6,7 +8,7 @@ const fetch   = require("node-fetch");
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1/chat/completions";
-const DEEPSEEK_API_KEY  = process.env.DEEPSEEK_API_KEY  || "sk-ae8a6bbb759a4698b3e6ee31b86ba25c";
+const DEEPSEEK_API_KEY  = process.env.DEEPSEEK_API_KEY  || "";
 const MODEL             = process.env.DEEPSEEK_MODEL    || "deepseek-chat";
 const MEANINGS_PATH     = path.join(__dirname, "meanings.json");
 const EXTRA_BANK_PATH   = path.join(__dirname, "wordbank-extra.json");
